@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Done List · 积极复盘｜独立编辑 + 智能分类</title>
+    <title>Done List · 积极复盘｜可展开分类速览 + 反思回顾</title>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- Font Awesome 6 -->
@@ -269,6 +269,17 @@
             padding: 12px 18px;
             flex: 1;
             text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .stat-card i.fa-chevron-down {
+            font-size: 0.7rem;
+            margin-left: 6px;
+            opacity: 0.6;
+        }
+        .stat-card:hover {
+            background: #eef2f6;
         }
         .chart-wrapper {
             height: 260px;
@@ -286,6 +297,74 @@
             font-size: 0.85rem;
             max-height: 200px;
             overflow-y: auto;
+            margin-bottom: 16px;
+        }
+        /* 可展开面板 */
+        .expandable-panel {
+            background: #fafcff;
+            border-radius: 24px;
+            padding: 12px 16px;
+            margin-top: 16px;
+            display: none;
+            border: 1px solid #eef2f8;
+        }
+        .insight-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            color: #2c5a3e;
+            border-left: 3px solid #2b7a4b;
+            padding-left: 10px;
+        }
+        .reflection-list, .category-record-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+        .reflection-list li, .category-record-list li {
+            margin-bottom: 12px;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            padding-left: 16px;
+            position: relative;
+        }
+        .reflection-list li::before, .category-record-list li::before {
+            content: "•";
+            position: absolute;
+            left: 2px;
+            color: #2b7a4b;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        .reflection-date {
+            font-weight: 500;
+            color: #4a6a5e;
+            margin-right: 8px;
+        }
+        .category-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .cat-filter-btn {
+            background: #eef2ff;
+            border: none;
+            padding: 4px 14px;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .cat-filter-btn.active {
+            background: #2b7a4b;
+            color: white;
+        }
+        .empty-tip {
+            color: #8aa0b5;
+            font-size: 0.75rem;
+            text-align: center;
+            padding: 12px;
         }
         .empty-records {
             text-align: center;
@@ -388,7 +467,7 @@
         </div>
     </div>
 
-    <!-- 3. 综合分析复盘区 -->
+    <!-- 3. 综合分析复盘区（可展开分类速览 + 反思回顾） -->
     <div class="analytics-container">
         <div class="section-title" style="border-left-color:#f59e0b;"><i class="fas fa-chart-line"></i> 综合分析复盘</div>
         <div class="range-buttons">
@@ -396,15 +475,33 @@
             <button data-range="week" class="range-btn">📅 本周</button>
             <button data-range="month" class="range-btn">🗓️ 本月</button>
         </div>
+        
+        <!-- 统计卡片：完成总数不可点击，涉及类别和反思条目可点击展开 -->
         <div class="stats-summary">
-            <div class="stat-card">✅ 完成总数: <strong id="totalDone">0</strong></div>
-            <div class="stat-card">🏷️ 涉及类别: <strong id="categoryCount">0</strong></div>
-            <div class="stat-card">💬 反思条目: <strong id="reflectionCount">0</strong></div>
+            <div class="stat-card" id="totalCard">✅ 完成总数: <strong id="totalDone">0</strong></div>
+            <div class="stat-card" id="categoryCard">🏷️ 涉及类别: <strong id="categoryCount">0</strong> <i class="fas fa-chevron-down"></i></div>
+            <div class="stat-card" id="reflectionCard">💬 反思条目: <strong id="reflectionCount">0</strong> <i class="fas fa-chevron-down"></i></div>
         </div>
+
         <div class="chart-wrapper">
             <canvas id="categoryChart" width="400" height="240" style="max-height: 240px;"></canvas>
         </div>
+        
+        <!-- 时间段明细列表 -->
         <div id="periodDetailList" class="period-detail"></div>
+
+        <!-- 可展开面板：分类速览（按类别回顾） -->
+        <div id="categoryPanel" class="expandable-panel">
+            <div class="insight-title"><i class="fas fa-tags"></i> 📂 按类别回顾（当前时段）</div>
+            <div id="categoryFilterButtons" class="category-buttons"></div>
+            <div id="categoryRecordsContainer" class="category-record-list"></div>
+        </div>
+
+        <!-- 可展开面板：反思回顾 -->
+        <div id="reflectionPanel" class="expandable-panel">
+            <div class="insight-title"><i class="fas fa-comment-dots"></i> 📝 反思回顾列表（当前时段）</div>
+            <div id="reflectionReviewList" class="reflection-list"></div>
+        </div>
     </div>
 </div>
 
@@ -418,6 +515,12 @@
     let currentRange = "day";
     let sortField = "completedAt";
     let sortOrder = "desc";
+    
+    // 面板展开状态
+    let isCategoryPanelOpen = false;
+    let isReflectionPanelOpen = false;
+    // 分类速览当前选中的分类（null表示全部）
+    let currentSelectedCategory = null;
 
     // 内置关键词库（已扩充）
     const DEFAULT_KEYWORD_MAP = {
@@ -502,9 +605,9 @@
             }));
         } else {
             records = [
-                { id: "1", title: "完成年度工作文案", description: "撰写了2000字稿件", reflection: "框架清晰，得到认可", imageData: null, category: "工作", completedAt: new Date().toISOString(), createdAt: new Date().toISOString() },
-                { id: "2", title: "洗衣服＋整理衣柜", description: "冬季衣物分类收纳", reflection: "整洁环境让心情愉悦", imageData: null, category: "生活", completedAt: new Date(Date.now() - 86400000).toISOString(), createdAt: new Date().toISOString() },
-                { id: "3", title: "晨间冥想15分钟", description: "正念呼吸练习", reflection: "专注力提升明显", imageData: null, category: "健康", completedAt: new Date(Date.now() - 172800000).toISOString(), createdAt: new Date().toISOString() }
+                { id: "1", title: "完成年度工作文案", description: "撰写了2000字稿件", reflection: "框架清晰，得到认可，下次可以更早启动", imageData: null, category: "工作", completedAt: new Date().toISOString(), createdAt: new Date().toISOString() },
+                { id: "2", title: "洗衣服＋整理衣柜", description: "冬季衣物分类收纳", reflection: "整洁环境让心情愉悦，每周固定整理效率更高", imageData: null, category: "生活", completedAt: new Date(Date.now() - 86400000).toISOString(), createdAt: new Date().toISOString() },
+                { id: "3", title: "晨间冥想15分钟", description: "正念呼吸练习", reflection: "专注力提升明显，坚持早睡配合更佳", imageData: null, category: "健康", completedAt: new Date(Date.now() - 172800000).toISOString(), createdAt: new Date().toISOString() }
             ];
             saveToLocal();
         }
@@ -641,6 +744,94 @@
         return records.filter(r => isInRange(r.completedAt, range));
     }
 
+    // 渲染反思回顾（基于传入的记录数组）
+    function renderReflectionReviewForRecords(recordsArray) {
+        const container = document.getElementById("reflectionReviewList");
+        const recordsWithReflection = recordsArray.filter(r => r.reflection && r.reflection.trim().length > 0);
+        if(recordsWithReflection.length === 0) {
+            container.innerHTML = '<div class="empty-tip">✨ 当前时段暂无反思记录，添加事项时写下感悟吧～</div>';
+            return;
+        }
+        // 按完成时间倒序
+        const sorted = [...recordsWithReflection].sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
+        let html = '<ul class="reflection-list" style="list-style:none;">';
+        sorted.forEach(rec => {
+            const dateStr = new Date(rec.completedAt).toLocaleDateString('zh-CN');
+            const reflectionText = escapeHtml(rec.reflection);
+            html += `<li><span class="reflection-date">📅 ${dateStr}</span> ${reflectionText}</li>`;
+        });
+        html += '</ul>';
+        container.innerHTML = html;
+    }
+
+    // 渲染分类速览（基于传入的记录数组）
+    function renderCategoryReviewForRecords(recordsArray, selectedCategory) {
+        const btnContainer = document.getElementById("categoryFilterButtons");
+        const recordsContainer = document.getElementById("categoryRecordsContainer");
+        
+        // 获取当前记录数组中的所有分类
+        const catsSet = new Set();
+        recordsArray.forEach(r => { if(r.category) catsSet.add(r.category); });
+        const categories = Array.from(catsSet).sort();
+        
+        if(categories.length === 0) {
+            btnContainer.innerHTML = '<div class="empty-tip">当前时段无分类数据</div>';
+            recordsContainer.innerHTML = '<div class="empty-tip">暂无记录</div>';
+            return;
+        }
+        
+        // 生成按钮
+        let btnsHtml = `<button class="cat-filter-btn ${selectedCategory === null ? 'active' : ''}" data-cat="">全部</button>`;
+        categories.forEach(cat => {
+            btnsHtml += `<button class="cat-filter-btn ${selectedCategory === cat ? 'active' : ''}" data-cat="${escapeHtml(cat)}">${escapeHtml(cat)}</button>`;
+        });
+        btnContainer.innerHTML = btnsHtml;
+        
+        // 绑定按钮事件
+        document.querySelectorAll('#categoryFilterButtons .cat-filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const cat = btn.getAttribute('data-cat');
+                const newSelected = (cat === "") ? null : cat;
+                // 重新渲染分类速览，保持面板打开状态
+                renderCategoryReviewForRecords(recordsArray, newSelected);
+                // 更新全局变量以便在range变化时保持选中分类？可选，但保持简单
+                currentSelectedCategory = newSelected;
+            });
+        });
+        
+        // 显示选中分类的记录
+        let filteredRecords = recordsArray;
+        if(selectedCategory) {
+            filteredRecords = recordsArray.filter(r => r.category === selectedCategory);
+        }
+        if(filteredRecords.length === 0) {
+            recordsContainer.innerHTML = `<div class="empty-tip">📭 暂无“${selectedCategory || '任何'}”分类下的记录</div>`;
+            return;
+        }
+        const sorted = [...filteredRecords].sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
+        let html = '<ul class="category-record-list">';
+        sorted.forEach(rec => {
+            const dateStr = new Date(rec.completedAt).toLocaleDateString('zh-CN');
+            const title = escapeHtml(rec.title);
+            const reflectionSnippet = rec.reflection ? ` — ${escapeHtml(rec.reflection.substring(0, 80))}${rec.reflection.length > 80 ? '…' : ''}` : '';
+            html += `<li><strong>📌 ${title}</strong> <span style="color:#6f8faa;">(${dateStr})</span>${reflectionSnippet}</li>`;
+        });
+        html += '</ul>';
+        recordsContainer.innerHTML = html;
+    }
+
+    // 更新所有面板内容（基于当前range的记录）
+    function updateExpandablePanels() {
+        const filtered = getFilteredRecords(currentRange);
+        if(isCategoryPanelOpen) {
+            // 保留当前选中的分类（可能已不在新的记录中，但重新渲染会自动重置）
+            renderCategoryReviewForRecords(filtered, currentSelectedCategory);
+        }
+        if(isReflectionPanelOpen) {
+            renderReflectionReviewForRecords(filtered);
+        }
+    }
+
     function renderAnalytics(range) {
         const filtered = getFilteredRecords(range);
         const total = filtered.length;
@@ -677,6 +868,14 @@
             if(filtered.length > 15) html += `<li>...... 还有${filtered.length-15}条，向上滚动列表查看全部</li>`;
             html += `</ul>`;
             detailDiv.innerHTML = html;
+        }
+        
+        // 如果展开面板是打开状态，刷新内容
+        if(isCategoryPanelOpen) {
+            renderCategoryReviewForRecords(filtered, currentSelectedCategory);
+        }
+        if(isReflectionPanelOpen) {
+            renderReflectionReviewForRecords(filtered);
         }
     }
 
@@ -721,7 +920,6 @@
             `;
         });
         container.innerHTML = html;
-        // 绑定独立按钮事件
         document.querySelectorAll('.edit-title-btn').forEach(btn => {
             btn.addEventListener('click', (e) => { const id = btn.getAttribute('data-id'); editTitleById(id); });
         });
@@ -810,6 +1008,8 @@
     function bindEvents() {
         document.getElementById("saveRecordBtn").addEventListener("click", handleAddRecord);
         document.getElementById("aiClassifyBtn").addEventListener("click", onAIClassify);
+        
+        // 时间段切换
         document.querySelectorAll(".range-btn").forEach(btn => {
             btn.addEventListener("click", (e) => {
                 document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
@@ -818,6 +1018,8 @@
                 renderAnalytics(currentRange);
             });
         });
+        
+        // 图片预览
         document.getElementById("eventImage").addEventListener("change", function(e) {
             const file = e.target.files[0];
             if(file && file.type.startsWith("image/")) {
@@ -825,6 +1027,39 @@
                 reader.onload = (ev) => { document.getElementById("imagePreview").innerHTML = `<img src="${ev.target.result}" style="max-width:80px; border-radius:12px;">`; };
                 reader.readAsDataURL(file);
             } else { document.getElementById("imagePreview").innerHTML = ""; }
+        });
+        
+        // 点击涉及类别卡片展开/折叠分类速览面板
+        const categoryCard = document.getElementById("categoryCard");
+        const categoryPanel = document.getElementById("categoryPanel");
+        categoryCard.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if(isCategoryPanelOpen) {
+                categoryPanel.style.display = "none";
+                isCategoryPanelOpen = false;
+            } else {
+                categoryPanel.style.display = "block";
+                isCategoryPanelOpen = true;
+                // 展开时基于当前range渲染内容
+                const filtered = getFilteredRecords(currentRange);
+                renderCategoryReviewForRecords(filtered, currentSelectedCategory);
+            }
+        });
+        
+        // 点击反思条目卡片展开/折叠反思回顾面板
+        const reflectionCard = document.getElementById("reflectionCard");
+        const reflectionPanel = document.getElementById("reflectionPanel");
+        reflectionCard.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if(isReflectionPanelOpen) {
+                reflectionPanel.style.display = "none";
+                isReflectionPanelOpen = false;
+            } else {
+                reflectionPanel.style.display = "block";
+                isReflectionPanelOpen = true;
+                const filtered = getFilteredRecords(currentRange);
+                renderReflectionReviewForRecords(filtered);
+            }
         });
     }
 
@@ -836,6 +1071,12 @@
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         document.getElementById("eventTime").value = now.toISOString().slice(0,16);
+        // 初始面板均为关闭
+        isCategoryPanelOpen = false;
+        isReflectionPanelOpen = false;
+        document.getElementById("categoryPanel").style.display = "none";
+        document.getElementById("reflectionPanel").style.display = "none";
+        currentSelectedCategory = null;
     }
     init();
 </script>
